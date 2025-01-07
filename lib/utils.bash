@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-# TODO: Ensure this is the correct GitHub homepage where releases can be downloaded for gettext.
-GH_REPO="https://github.com/eniayomi/gettext"
+# GNU gettext is hosted on GNU's FTP server
+MIRROR_URL="https://ftp.gnu.org/gnu/gettext"
 TOOL_NAME="gettext"
 TOOL_TEST="gettext --version"
 
@@ -12,28 +12,33 @@ fail() {
 	exit 1
 }
 
-curl_opts=(-fsSL)
+# Check if command exists
+has_command() {
+  command -v "$1" >/dev/null 2>&1
+}
 
-# NOTE: You might want to remove this if gettext is not hosted on GitHub releases.
-if [ -n "${GITHUB_API_TOKEN:-}" ]; then
-	curl_opts=("${curl_opts[@]}" -H "Authorization: token $GITHUB_API_TOKEN")
-fi
+# Check macOS and Homebrew
+check_mac_brew() {
+  if [[ "$(uname)" == "Darwin" ]]; then
+    if ! has_command brew; then
+      fail "Homebrew is required to install gettext on macOS. Install from https://brew.sh"
+    fi
+  fi
+}
+
+curl_opts=(-fsSL)
 
 sort_versions() {
 	sed 'h; s/[+-]/./g; s/.p\([[:digit:]]\)/.z\1/; s/$/.z/; G; s/\n/ /' |
 		LC_ALL=C sort -t. -k 1,1 -k 2,2n -k 3,3n -k 4,4n -k 5,5n | awk '{print $2}'
 }
 
-list_github_tags() {
-	git ls-remote --tags --refs "$GH_REPO" |
-		grep -o 'refs/tags/.*' | cut -d/ -f3- |
-		sed 's/^v//' # NOTE: You might want to adapt this sed to remove non-version strings from tags
-}
-
 list_all_versions() {
-	# TODO: Adapt this. By default we simply list the tag names from GitHub releases.
-	# Change this function if gettext has other means of determining installable versions.
-	list_github_tags
+	# Fetch the directory listing from GNU mirror and extract version numbers
+	curl "${curl_opts[@]}" "$MIRROR_URL/" | \
+		grep -o 'gettext-[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?\.' | \
+		grep -o '[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?' | \
+		sort_versions
 }
 
 download_release() {
@@ -41,9 +46,13 @@ download_release() {
 	version="$1"
 	filename="$2"
 
-	# TODO: Adapt the release URL convention for gettext
-	url="$GH_REPO/archive/v${version}.tar.gz"
+	# On macOS, we don't need to download the source
+	if [[ "$(uname)" == "Darwin" ]]; then
+		touch "$filename"  # Create empty file to satisfy asdf
+		return 0
+	fi
 
+	url="$MIRROR_URL/gettext-${version}.tar.gz"
 	echo "* Downloading $TOOL_NAME release $version..."
 	curl "${curl_opts[@]}" -o "$filename" -C - "$url" || fail "Could not download $url"
 }
@@ -57,11 +66,47 @@ install_version() {
 		fail "asdf-$TOOL_NAME supports release installs only"
 	fi
 
+	# Check for Homebrew on macOS
+	check_mac_brew
+
+	if [[ "$(uname)" == "Darwin" ]]; then
+		echo "Installing gettext via Homebrew on macOS..."
+		brew install gettext
+
+		# Create the install directory
+		mkdir -p "$install_path"
+
+		# Link Homebrew's gettext binaries to asdf's bin directory
+		local brew_prefix
+		brew_prefix=$(brew --prefix)
+		local brew_gettext_bin="$brew_prefix/opt/gettext/bin"
+
+		# Link all executables from Homebrew's gettext to asdf's bin directory
+		for bin in "$brew_gettext_bin"/*; do
+			if [[ -x "$bin" ]]; then
+				ln -sf "$bin" "$install_path/$(basename "$bin")"
+			fi
+		done
+
+		echo "$TOOL_NAME $version installation was successful!"
+		return 0
+	fi
+
+	# For non-macOS systems, proceed with source installation
 	(
 		mkdir -p "$install_path"
-		cp -r "$ASDF_DOWNLOAD_PATH"/* "$install_path"
+		cd "$ASDF_DOWNLOAD_PATH"
+		
+		# Extract source
+		tar xzf "gettext-${version}.tar.gz"
+		cd "gettext-${version}"
+		
+		# Configure and build
+		./configure --prefix="$install_path/.." || fail "Could not configure gettext build"
+		make || fail "Could not build gettext"
+		make install || fail "Could not install gettext"
 
-		# TODO: Assert gettext executable exists.
+		# Verify installation
 		local tool_cmd
 		tool_cmd="$(echo "$TOOL_TEST" | cut -d' ' -f1)"
 		test -x "$install_path/$tool_cmd" || fail "Expected $install_path/$tool_cmd to be executable."
