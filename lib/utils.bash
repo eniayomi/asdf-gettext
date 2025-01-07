@@ -36,9 +36,9 @@ sort_versions() {
 list_all_versions() {
 	# Fetch the directory listing from GNU mirror and extract version numbers
 	curl "${curl_opts[@]}" "$MIRROR_URL/" | \
-		grep -o 'gettext-[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?\.' | \
-		grep -o '[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?' | \
-		sort_versions
+		grep -o 'gettext-[0-9][0-9.]*\.tar\.gz' | \
+		sed 's/gettext-\([0-9][0-9.]*\)\.tar\.gz/\1/' | \
+		sort_versions | uniq
 }
 
 download_release() {
