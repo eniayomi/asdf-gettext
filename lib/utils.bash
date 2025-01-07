@@ -14,16 +14,16 @@ fail() {
 
 # Check if command exists
 has_command() {
-  command -v "$1" >/dev/null 2>&1
+	command -v "$1" >/dev/null 2>&1
 }
 
 # Check macOS and Homebrew
 check_mac_brew() {
-  if [[ "$(uname)" == "Darwin" ]]; then
-    if ! has_command brew; then
-      fail "Homebrew is required to install gettext on macOS. Install from https://brew.sh"
-    fi
-  fi
+	if [[ "$(uname)" == "Darwin" ]]; then
+		if ! has_command brew; then
+			fail "Homebrew is required to install gettext on macOS. Install from https://brew.sh"
+		fi
+	fi
 }
 
 curl_opts=(-fsSL)
@@ -35,9 +35,9 @@ sort_versions() {
 
 list_all_versions() {
 	# Fetch the directory listing from GNU mirror and extract version numbers
-	curl "${curl_opts[@]}" "$MIRROR_URL/" | \
-		grep -o 'gettext-[0-9][0-9.]*\.tar\.gz' | \
-		sed 's/gettext-\([0-9][0-9.]*\)\.tar\.gz/\1/' | \
+	curl "${curl_opts[@]}" "$MIRROR_URL/" |
+		grep -o 'gettext-[0-9][0-9.]*\.tar\.gz' |
+		sed 's/gettext-\([0-9][0-9.]*\)\.tar\.gz/\1/' |
 		sort_versions | uniq
 }
 
@@ -48,7 +48,7 @@ download_release() {
 
 	# On macOS, we don't need to download the source
 	if [[ "$(uname)" == "Darwin" ]]; then
-		touch "$filename"  # Create empty file to satisfy asdf
+		touch "$filename" # Create empty file to satisfy asdf
 		return 0
 	fi
 
@@ -96,11 +96,11 @@ install_version() {
 	(
 		mkdir -p "$install_path"
 		cd "$ASDF_DOWNLOAD_PATH"
-		
+
 		# Extract source
 		tar xzf "gettext-${version}.tar.gz"
 		cd "gettext-${version}"
-		
+
 		# Configure and build
 		./configure --prefix="$install_path/.." || fail "Could not configure gettext build"
 		make || fail "Could not build gettext"
